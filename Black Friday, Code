@@ -1,0 +1,127 @@
+### An R code for the California housing example. The dataset is available in scikit-learn package.
+### This code was executed 50 times (with differnt seeds). 
+
+##Importing relevant libraries
+library(dplyr)
+library(lme4)
+
+
+##Paht
+data_folder<-"your data folder path"
+
+
+{
+  ##Importing the data
+  Data_org<-read.csv(file = paste0(data_folder,"/BlackFriday.csv"))
+  Data<-Data_org[,c(1,3:9,12)]
+  Data<-na.omit(Data)
+  
+  ## Sampling training and test
+  Data<-Data%>%mutate(ID= group_indices_(Data, .dots="User_ID"))
+  clusters<-unique(Data$ID) 
+  
+  set.seed(1)
+  sample_cluster<-sample(clusters, size=1000, replace = F)
+  Data_Tr_int<-Data[Data$ID %in% sample_cluster[1:100],]
+  Data_Test_int<-Data[Data$ID %in% sample_cluster[101:1000],]
+  
+  ## Transforming categorical variables to dummy variables and adjusting thier levels between training and test
+  for(i in 2:8){
+    levels<-names(which(table(factor(Data_Tr_int[,i]))>1))
+    Data_Tr_int<-Data_Tr_int[factor(Data_Tr_int[,i]) %in% levels,]
+    Data_Test_int<-Data_Test_int[factor(Data_Test_int[,i]) %in% levels,]
+  }
+  
+  Covariates_tr<-model.matrix(lm(Purchase~as.factor(Product_Category_1)+as.factor(Marital_Status)+Gender + Age+as.factor(Occupation)+
+                                   City_Category+as.factor(Stay_In_Current_City_Years), data=Data_Tr_int))
+  Covariates_test<-model.matrix(lm(Purchase~as.factor(Product_Category_1)+as.factor(Marital_Status)+Gender + Age+as.factor(Occupation)+
+                                     City_Category+as.factor(Stay_In_Current_City_Years), data=Data_Test_int))
+  
+  
+  Data_Tr<-data.frame(Data_Tr_int$ID,Data_Tr_int$Purchase,Covariates_tr[,-1])
+  Data_Tr<-Data_Tr[order(Data_Tr$ID),]
+  Data_Test<-data.frame(Data_Test_int$ID,Data_Test_int$Purchase,Covariates_test[,-1])
+  
+  names(Data_Tr)[1:2]<-c("ID","Purchase")
+  names(Data_Test)[1:2]<-c("ID","Purchase")
+}
+
+
+## Models defenition
+{
+  Pro_length<-sum(grepl("Pro", names(data.frame(Covariates_tr))))
+  Marital_length<-sum(grepl("Marital", names(data.frame(Covariates_tr))))
+  Gender_length<-sum(grepl("Gender", names(data.frame(Covariates_tr))))
+  Age_length<-sum(grepl("Age", names(data.frame(Covariates_tr))))
+  Occ_length<-sum(grepl("Occ", names(data.frame(Covariates_tr))))
+  City_length<-sum(grepl("City_Category", names(data.frame(Covariates_tr))))
+  Stay_length<-sum(grepl("Stay", names(data.frame(Covariates_tr))))
+  
+  Stop_m1<-2+Pro_length
+  Stop_m2<-2+Pro_length+Marital_length+Gender_length+Age_length
+  Stop_m3<-2+Pro_length+Marital_length+Gender_length+Age_length+Occ_length+City_length+Stay_length
+  
+  model_i<-list(c(3:Stop_m1),c(3:Stop_m2),c(3:Stop_m3))
+  
+  model_no<-length(model_i)
+  n<-nrow(Data_Tr)
+  n_test<-nrow(Data_Test)
+}
+
+{
+  Error_tr<-matrix(NA,1,model_no)
+  Correction<-matrix(NA,1,model_no)
+  Error_Gen<-matrix(NA,1,model_no)
+}
+
+
+for(j in 1:model_no){
+
+  y_test<-Data_Test$Purchase
+  X_test<-as.matrix(cbind(rep(1,n_test),Data_Test[,unlist(model_i[j])]))
+  
+  y_tr<-Data_Tr$Purchase
+  X_tr<-as.matrix(cbind(rep(1,n),Data_Tr[,unlist(model_i[j])]))
+  
+  Z<-model.matrix(~ factor(ID)-1, data=Data_Tr)
+
+  ## Estimating variance parameters  
+  Prefit <- lmer(y_tr ~X_tr-1+(1|Data_Tr$ID),REML=T)
+  Var_model_j<-Z%*%diag(unclass(VarCorr(Prefit))$'Data_Tr$ID'[1],ncol(Z))%*%t(Z)+diag(attr(VarCorr(Prefit),"sc")^2,n)
+  
+
+  ## Creating H_cv matrix
+  H_CV<-matrix(0,n,n)
+  
+  # First iteration
+  i<-1
+  X_tr_i<-X_tr[i,]
+  X_tr_minus_i<-X_tr[-i,]
+  V_minus_i<-Var_model_j[-i,-i]
+  Solve_V_minus_i<-chol2inv(chol(V_minus_i))
+  H_CV[i,-i]<-X_tr_i%*%chol2inv(chol(t(X_tr_minus_i)%*%Solve_V_minus_i%*%X_tr_minus_i))%*%t(X_tr_minus_i)%*%Solve_V_minus_i
+  
+  #The other iteration
+  for(i in 2:n){
+    X_tr_i<-X_tr[i,]
+    X_tr_minus_i<-X_tr[-i,]
+    V_minus_i<-as.matrix(Var_model_j[-i,-i])
+   # In order to save computational cost, inverse operator is used only in case observations i and i-1 belong to different clusters. 
+    if(Data_Tr$ID[i]!=Data_Tr$ID[i-1]){
+      Solve_V_minus_i<-chol2inv(chol(V_minus_i))
+    }
+    
+    H_CV[i,-i]<-X_tr_i%*%chol2inv(chol(t(X_tr_minus_i)%*%Solve_V_minus_i%*%X_tr_minus_i))%*%t(X_tr_minus_i)%*%Solve_V_minus_i
+  }
+  
+  ## CV and correction calculation.
+  Error_tr[j]<-1/n*(t(y_tr-H_CV%*%y_tr)%*%(y_tr-H_CV%*%y_tr))
+  Correction[j]<-2/n*sum(diag(H_CV%*%Var_model_j))
+  
+  # Generaliztion Error estimation
+  Solve_Var_model_j<-chol2inv(chol(Var_model_j))
+  H_gen<-X_test%*%solve(t(X_tr)%*%Solve_Var_model_j%*%X_tr)%*%t(X_tr)%*%Solve_Var_model_j
+  Error_Gen[j]<-1/n_test*(t(y_test-H_gen%*%y_tr)%*%(y_test-H_gen%*%y_tr))
+
+}
+
