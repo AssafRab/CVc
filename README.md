@@ -1,2 +1,1 @@
-# CVc
-CV for correlated data
+This repository related to the paper 'Cross-validation for correlated data' Rabinowicz and Rosset. The repository contains simiulation code and real data example code. Also, it contains the Black Friday dataset. 
