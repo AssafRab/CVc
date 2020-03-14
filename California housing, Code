@@ -1,11 +1,11 @@
-### This is an R code for estimating CVc, CV and the generalization error. This code was executed 50 times (with differnt seeds). 
-### The California housing dataset is available on scikit-learn package.
+### An R code for the California housing example. The dataset is available in scikit-learn package.
+### This code was executed 50 times (with differnt seeds). 
 
+#Import relevant library
 library(dplyr)
 
-Output<-"your output folder path"
-Data<-"your data folder path"
-
+## Path
+Data_folder<-"your data folder path"
 
 ## Function for estimating the covariance parameters
 Loss <- function(par,X,Coor,Y,Block) {
@@ -36,7 +36,7 @@ Loss <- function(par,X,Coor,Y,Block) {
 #Prepering the data
 {
 
-  housing_price<-read.csv(file = paste0(Data,"/housing_price.csv",sep=""))[,-1]
+  housing_price<-read.csv(file = paste0(Data_folder,"/housing_price.csv",sep=""))[,-1]
   housing_price<-housing_price[,c(9,7:8,1:6)]
   housing_price<-housing_price %>%mutate(ID = group_indices_(housing_price, .dots=c("Latitude","Longitude"))) 
 
@@ -61,7 +61,6 @@ Loss <- function(par,X,Coor,Y,Block) {
 }
 
 
-
 #Defining the models
 {
   model_i<-list(c(4),c(4:6),c(4:9))
@@ -76,6 +75,7 @@ Loss <- function(par,X,Coor,Y,Block) {
   Correction<-matrix(NA,1,model_no)
   Error_Gen<-matrix(NA,1,model_no)
 }
+
 
 for(j in 1:model_no){
   
@@ -146,6 +146,3 @@ for(j in 1:model_no){
   Error_Gen[j]<-1/n_test*(t(y_test-H_gen%*%y_tr)%*%(y_test-H_gen%*%y_tr))
   
 }
-
-
-
