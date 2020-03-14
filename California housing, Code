@@ -1,4 +1,5 @@
-### This is an R code for estimating CVc, CV and the generalization error. This code was executed 50 times (with differnt seeds)
+### This is an R code for estimating CVc, CV and the generalization error. This code was executed 50 times (with differnt seeds). 
+### The California housing dataset is available on scikit-learn package.
 
 library(dplyr)
 
@@ -7,7 +8,6 @@ Data<-"your data folder path"
 
 
 ## Function for estimating the covariance parameters
-
 Loss <- function(par,X,Coor,Y,Block) {
   signal<-par[1]
   eta<-par[2]
@@ -21,21 +21,16 @@ Loss <- function(par,X,Coor,Y,Block) {
   rotation<-matrix(c(rotCos,rotSin,-rotSin,rotCos),2,2)
   scaling<-matrix(c(lambda1,0,0,lambda2),2,2)
   
-  #
   K<-matrix(NA,length(Y),length(Y))
   for(col in 1:length(Y)){
-    # for(row in 1:length(y_test)){
     s<-cbind(Coor[,1]-Coor[col,1],Coor[,2]-Coor[col,2])
     K[,col]<-signal*exp(-sqrt(diag(s%*%chol2inv(chol(rotation%*%scaling%*%t(rotation)))%*%t(s))))
   }
   Var<-K+SigSq*diag(length(Y))
-  # Var_inv<-chol2inv(chol(exp(-(sqrt(la_dist)/(b1))-(sqrt(lo_dist)/(b2)))+(c)*diag(nrow(la_dist))+d*Block))
   Var_inv<-chol2inv(chol(Var))
   mean<-X%*%chol2inv(chol(t(X)%*%Var_inv%*%X))%*%t(X)%*%Var_inv%*%Y
   return(t(Y-mean)%*%Var_inv%*%(Y-mean)+sum(diag(log(Var))))
 }
-
-
 
 
 #Prepering the data
@@ -146,7 +141,6 @@ for(j in 1:model_no){
   
 
   # Generaliztion Error
-  
   Var_model_j_inv<-chol2inv(chol(V))
   H_gen<-X_test%*%chol2inv(chol(t(X_tr)%*%Var_model_j_inv%*%X_tr))%*%t(X_tr)%*%Var_model_j_inv+K_star%*%Var_model_j_inv%*%(diag(1,n_tr)-X_tr%*%chol2inv(chol(t(X_tr)%*%Var_model_j_inv%*%X_tr))%*%t(X_tr)%*%Var_model_j_inv)
   Error_Gen[j]<-1/n_test*(t(y_test-H_gen%*%y_tr)%*%(y_test-H_gen%*%y_tr))
